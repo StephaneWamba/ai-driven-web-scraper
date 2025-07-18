@@ -124,8 +124,10 @@ temp/
 # Terraform
 *.tfstate
 *.tfstate.*
+*.tfstate.lock.info
 .terraform/
 .terraform.lock.hcl
+tfplan
 
 # AWS
 .aws/

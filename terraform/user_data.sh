@@ -13,7 +13,7 @@ sudo chown ubuntu:ubuntu /home/ubuntu/ai-scraper
 
 # Clone the repository
 cd /home/ubuntu
-git clone https://github.com/your-username/ai-driven-web-scraper.git ai-scraper
+git clone https://github.com/StephaneWamba/ai-driven-web-scraper.git ai-scraper
 cd ai-scraper
 
 # Set up backend

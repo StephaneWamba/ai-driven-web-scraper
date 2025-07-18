@@ -1,6 +1,6 @@
 # AI-Driven Web Scraper Portfolio Project
 
-> **🚀 Live Demo**: [http://54.165.182.47](http://54.165.182.47) | **API Docs**: [http://54.165.182.47:8000/docs](http://54.165.182.47:8000/docs)
+> **🚀 Portfolio Project**: AI-Powered Web Scraper for E-commerce Intelligence
 
 A comprehensive full-stack application demonstrating AI-powered web scraping for competitive price intelligence across major e-commerce platforms.
 
@@ -190,4 +190,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **🎯 Perfect for**: Portfolio demonstrations, client presentations, learning modern full-stack development, and showcasing AI integration in web applications.
 
-**🔗 Live Demo**: [http://54.165.182.47](http://54.165.182.47)
+**🔗 Repository**: [https://github.com/StephaneWamba/ai-driven-web-scraper](https://github.com/StephaneWamba/ai-driven-web-scraper)
