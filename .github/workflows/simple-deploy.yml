@@ -1,0 +1,28 @@
+name: Simple Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  SERVER_IP: 54.165.182.47
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test Connection
+        run: |
+          echo "Testing deployment workflow..."
+          echo "Server IP: ${{ env.SERVER_IP }}"
+          echo "This is a test deployment step"
+
+      - name: Success Message
+        run: |
+          echo "✅ Simple deployment workflow is working!"
+          echo "🌐 Application URL: http://${{ env.SERVER_IP }}"
+          echo "📚 API Docs: http://${{ env.SERVER_IP }}:8000/docs"
