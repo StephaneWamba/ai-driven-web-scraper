@@ -93,23 +93,35 @@ jobs:
           docker build -f Dockerfile.backend -t ai-scraper-backend:${{ github.sha }} .
           docker build -f Dockerfile.frontend -t ai-scraper-frontend:${{ github.sha }} .
 
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ env.SERVER_IP }} >> ~/.ssh/known_hosts
+
       - name: Deploy to EC2
         run: |
           # Create deployment script
-          echo '#!/bin/bash' > deploy.sh
-          echo 'cd /home/ubuntu/ai-scraper' >> deploy.sh
-          echo 'git pull origin main' >> deploy.sh
-          echo 'cd backend && pip install -r requirements.txt' >> deploy.sh
-          echo 'sudo systemctl restart ai-scraper-backend' >> deploy.sh
-          echo 'cd ../frontend && npm install && npm run build' >> deploy.sh
-          echo 'sudo systemctl restart nginx' >> deploy.sh
+          cat > deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          cd /home/ubuntu/ai-scraper
+          git pull origin main
+          cd backend && pip install -r requirements.txt
+          sudo systemctl restart ai-scraper-backend
+          cd ../frontend && npm install && npm run build
+          sudo systemctl restart nginx
+          echo "Deployment completed successfully!"
+          EOF
+
           chmod +x deploy.sh
 
           # Copy deployment script to server
-          scp -o StrictHostKeyChecking=no -i ${{ secrets.EC2_SSH_KEY }} deploy.sh ubuntu@${{ env.SERVER_IP }}:/home/ubuntu/
+          scp deploy.sh ubuntu@${{ env.SERVER_IP }}:/home/ubuntu/
 
           # Execute deployment
-          ssh -o StrictHostKeyChecking=no -i ${{ secrets.EC2_SSH_KEY }} ubuntu@${{ env.SERVER_IP }} './deploy.sh'
+          ssh ubuntu@${{ env.SERVER_IP }} './deploy.sh'
 
       - name: Health check
         run: |
