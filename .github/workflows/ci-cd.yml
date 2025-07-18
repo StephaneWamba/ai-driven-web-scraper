@@ -7,6 +7,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Add permissions to fix integration access issues
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+  id-token: write
+
 env:
   AWS_REGION: us-east-1
   SERVER_IP: 54.165.182.47
@@ -156,7 +163,7 @@ jobs:
           output: "trivy-results.sarif"
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: "trivy-results.sarif"

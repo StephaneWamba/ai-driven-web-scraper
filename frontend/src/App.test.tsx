@@ -2,8 +2,15 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test('renders app without crashing', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  // Basic test to ensure app renders without errors
+  expect(document.body).toBeInTheDocument();
+});
+
+test('app has main content', () => {
+  render(<App />);
+  // Check if the app has some content
+  const appElement = document.querySelector('.min-h-screen');
+  expect(appElement).toBeInTheDocument();
 });
