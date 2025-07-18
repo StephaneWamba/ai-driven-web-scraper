@@ -1,0 +1,161 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  SERVER_IP: 54.165.182.47
+
+jobs:
+  # Test Backend
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          pytest --cov=app --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+
+  # Test Frontend
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm test -- --coverage --watchAll=false
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+
+  # Build and Deploy
+  build-and-deploy:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build Docker images
+        run: |
+          docker build -f Dockerfile.backend -t ai-scraper-backend:${{ github.sha }} .
+          docker build -f Dockerfile.frontend -t ai-scraper-frontend:${{ github.sha }} .
+
+      - name: Deploy to EC2
+        run: |
+          # Create deployment script
+          echo '#!/bin/bash' > deploy.sh
+          echo 'cd /home/ubuntu/ai-scraper' >> deploy.sh
+          echo 'git pull origin main' >> deploy.sh
+          echo 'cd backend && pip install -r requirements.txt' >> deploy.sh
+          echo 'sudo systemctl restart ai-scraper-backend' >> deploy.sh
+          echo 'cd ../frontend && npm install && npm run build' >> deploy.sh
+          echo 'sudo systemctl restart nginx' >> deploy.sh
+          chmod +x deploy.sh
+
+          # Copy deployment script to server
+          scp -o StrictHostKeyChecking=no -i ${{ secrets.EC2_SSH_KEY }} deploy.sh ubuntu@${{ env.SERVER_IP }}:/home/ubuntu/
+
+          # Execute deployment
+          ssh -o StrictHostKeyChecking=no -i ${{ secrets.EC2_SSH_KEY }} ubuntu@${{ env.SERVER_IP }} './deploy.sh'
+
+      - name: Health check
+        run: |
+          # Wait for services to start
+          sleep 30
+
+          # Check backend health
+          curl -f http://${{ env.SERVER_IP }}:8000/health || exit 1
+
+          # Check frontend
+          curl -f http://${{ env.SERVER_IP }} || exit 1
+
+  # Security Scan
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
+
+  # Notify on completion
+  notify:
+    needs: [build-and-deploy, security-scan]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment Status
+        run: |
+          if [ "${{ needs.build-and-deploy.result }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+            echo "🌐 Application URL: http://${{ env.SERVER_IP }}"
+            echo "📚 API Docs: http://${{ env.SERVER_IP }}:8000/docs"
+          else
+            echo "❌ Deployment failed!"
+            exit 1
+          fi

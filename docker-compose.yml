@@ -1,0 +1,140 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: ai-scraper-db
+    environment:
+      POSTGRES_DB: scraper_db
+      POSTGRES_USER: scraper_user
+      POSTGRES_PASSWORD: scraper_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scraper_user -d scraper_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-scraper-network
+
+  # Redis for caching and job queues
+  redis:
+    image: redis:7-alpine
+    container_name: ai-scraper-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-scraper-network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: ai-scraper-backend
+    environment:
+      - DATABASE_URL=postgresql://scraper_user:scraper_password@postgres:5432/scraper_db
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-ai-scraper-data}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ai-scraper-network
+    restart: unless-stopped
+
+  # React Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: ai-scraper-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      - REACT_APP_API_URL=http://localhost/api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ai-scraper-network
+    restart: unless-stopped
+
+  # Celery Worker for background tasks
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: ai-scraper-worker
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info"]
+    environment:
+      - DATABASE_URL=postgresql://scraper_user:scraper_password@postgres:5432/scraper_db
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    networks:
+      - ai-scraper-network
+    restart: unless-stopped
+
+  # Flower for monitoring Celery tasks
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: ai-scraper-flower
+    command: ["celery", "-A", "app.celery_app", "flower", "--port=5555"]
+    environment:
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - worker
+    networks:
+      - ai-scraper-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  ai-scraper-network:
+    driver: bridge
